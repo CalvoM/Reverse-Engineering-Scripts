@@ -1,0 +1,35 @@
+#!/usr/bin/python
+import struct
+import binascii
+import datetime
+fileext = { 0:'none',1:'gzip',2:'bzip2',3:'lzma',4:'lzo'}
+fin = open("./uImage" , "rb")
+uimghdr = fin.read(64)
+magic,        = struct.unpack("!i"   , uimghdr[ 0:4 ] )
+headercrc32,  = struct.unpack("!I"   , uimghdr[ 4:8 ] )
+print(hex(headercrc32))
+timestamp,    = struct.unpack("!i"   , uimghdr[ 8:12] )
+datasize,     = struct.unpack("!i"   , uimghdr[12:16] )
+LoadAddress,  = struct.unpack("!i"   , uimghdr[16:20] )
+EntryPtAddr,  = struct.unpack("!i"   , uimghdr[20:24] )
+Datacrc32,    = struct.unpack("!I"   , uimghdr[24:28] )
+OperatingSys, = struct.unpack("!b"   , uimghdr[28:29] )
+Architecture, = struct.unpack("!b"   , uimghdr[29:30] )
+ImageType,    = struct.unpack("!b"   , uimghdr[30:31] )
+CompressType, = struct.unpack("!b"   , uimghdr[31:32] )
+ImageName,    = struct.unpack("!32s" , uimghdr[32:64] )
+uimgdata = fin.read(datasize)
+fin.close()
+copy = list(uimghdr)
+copy[4:8] = [0,0,0,0] 
+crcdata = ''.join([chr(x) for x in copy])
+realhdrcrc32 = binascii.crc32(bytes(crcdata,'latin1'))
+print(hex(realhdrcrc32))
+realdatacrc32 = binascii.crc32(uimgdata)
+assert ( realhdrcrc32  == headercrc32 )
+assert ( realdatacrc32 == Datacrc32 )
+print (f"UBoot Header Magic {hex(magic)}" )
+print (f"UBoot Header crc32 {hex( realhdrcrc32)}" )
+print (f"UBoot Header Tstmp {datetime.datetime.fromtimestamp(timestamp)}" ) 
+print (f"UBoot Header DSize {hex(datasize)}" )
+print (f"Uboot Compression  {fileext[CompressType]}" )
