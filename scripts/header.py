@@ -21,23 +21,14 @@ import binascii
 import datetime
 import yaml
 import binwalk
-import subprocess
-import shlex
+import os
+#* Please supply the extracted header file some images do not have the header as first portion
+
 file_name = sys.argv[1]
-pack_fmt = "!I"
-
-
-def dd_file(skip,id,count=None):
-    out_file = "data" + str(id)
-    if count is None:
-        dd_args = f"dd if={file_name} of={out_file} bs=1 skip={skip}"
-    else:
-        dd_args = f"dd if={file_name} of={out_file} bs=1 skip={skip} count={count}"
-    args = shlex.split(dd_args)
-    subprocess.run(args)
-
-
-with open('./scripts/field.yaml') as yf:
+pack_fmt = "!I" #Prevent unexpected negative numbers e.g for CRC
+scripts_folder = os.path.dirname(os.path.abspath(__file__)) #Just better reference
+fields_path = scripts_folder+"/field.yaml"
+with open(fields_path) as yf:
     fields = yaml.load(yf,Loader=yaml.FullLoader)
 
 arch = fields['enums']['uimage_arch']
@@ -61,20 +52,18 @@ with open(file_name,'rb') as f:
     compression_type ,= struct.unpack(pack_fmt, uImgHeader[31:32])
     pack_fmt = "!32s"
     image_name, = struct.unpack(pack_fmt, uImgHeader[32:64])
-    image_data = f.read(image_len)
 
 #confirm the CRC-32
 copy_img = list(uImgHeader)
-copy_img[4:8] = bytes('\x00','latin1')*4
+copy_img[4:8] = bytes('\x00','latin1')*4 # CRC value is not part of data to calculate CRC
 copy_img_str = ''.join([chr(x) for x in copy_img])
 calc_hdr_crc = binascii.crc32(bytes(copy_img_str,'latin1'))
-calc_data_crc = binascii.crc32(image_data)
 
 assert(calc_hdr_crc == header_crc)
-assert(calc_data_crc == data_crc)
 
-print(f"Magic Number:{magic_number}")
-print(f"Header CRC:{header_crc}")
+
+print(f"Magic Number:{hex(magic_number)}")
+print(f"Header CRC:{hex(header_crc)}")
 print(f"Timestamp:{datetime.datetime.fromtimestamp(timestamp,datetime.timezone.utc)}")
 print(f"Image Length:{image_len} bytes")
 print(f"Loading from address {hex(load_addr)}")
@@ -85,14 +74,3 @@ print(f"Os type:{os[os_type]['id']}")
 print(f"Compression Type:{compression[compression_type]['id']}")
 print(f"Image type:{image[image_type]['id']}")
 print(f"Name:{image_name.decode('latin1')}")
-
-modules = binwalk.scan(file_name, signature=True,quiet=True)
-results = modules[0].results
-for i,r in enumerate(results):
-    if i!=(len(results)-1):
-        print(r.description)
-        dd_file(r.offset,i,results[i+1].offset-r.offset)
-    else:
-        print(r.description)
-        dd_file(r.offset,i)
-
